@@ -1,0 +1,5 @@
+streamlit
+SpeechRecognition
+pyaudio
+pandas
+scikit-learn

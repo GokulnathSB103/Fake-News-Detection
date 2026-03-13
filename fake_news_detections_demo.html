@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fake News Detections – Fake News Impact Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a0f1e;
+    --deep: #0d1526;
+    --blue: #1e40af;
+    --glow: #3b82f6;
+    --cyan: #06b6d4;
+    --red: #ef4444;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --white: #f8fafc;
+    --muted: #64748b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--navy);
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--white);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    width: 12px; height: 12px;
+    background: var(--cyan);
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transition: transform 0.1s;
+    box-shadow: 0 0 15px var(--cyan);
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Noise grain */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 101;
+    opacity: 0.4;
+  }
+
+  /* === SCENES === */
+  .scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+    padding: 40px;
+  }
+  .scene.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* === GRID BG === */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* === HEADER STRIP === */
+  .hud-top {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: rgba(10,15,30,0.95);
+    border-bottom: 1px solid rgba(59,130,246,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    z-index: 200;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+  }
+  .hud-logo { color: var(--glow); font-family: 'Orbitron', monospace; font-weight: 700; letter-spacing: 3px; font-size: 0.9rem; }
+  .hud-status { color: var(--green); display: flex; align-items: center; gap: 8px; }
+  .hud-status::before { content: '●'; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .hud-right { color: var(--muted); }
+
+  /* === PROGRESS BAR === */
+  .progress-bar {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--glow), var(--cyan));
+    z-index: 200;
+    transition: width 0.8s ease;
+    box-shadow: 0 0 10px var(--cyan);
+  }
+
+  /* === SCENE NAV === */
+  .nav-dots {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 200;
+  }
+  .nav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .nav-dot.active { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); width: 24px; border-radius: 4px; }
+
+  /* === PLAY/PAUSE === */
+  .controls {
+    position: fixed;
+    bottom: 20px;
+    right: 32px;
+    z-index: 200;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .ctrl-btn {
+    background: rgba(30,64,175,0.4);
+    border: 1px solid rgba(59,130,246,0.4);
+    color: white;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.2s;
+  }
+  .ctrl-btn:hover { background: rgba(59,130,246,0.4); box-shadow: 0 0 12px rgba(59,130,246,0.5); }
+  .scene-counter { font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+
+  /* ==============================
+     SCENE 1 – TITLE
+  ============================== */
+  #s1 .title-badge {
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--cyan);
+    font-size: 0.8rem;
+    letter-spacing: 6px;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.3s forwards;
+  }
+  #s1 h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 0%, var(--cyan) 50%, var(--glow) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.6s forwards;
+  }
+  #s1 .subtitle {
+    color: #94a3b8;
+    font-size: 1.2rem;
+    margin-top: 16px;
+    letter-spacing: 2px;
+    opacity: 0;
+    animation: fadeUp 0.6s 1s forwards;
+  }
+  #s1 .shield {
+    font-size: 5rem;
+    margin-bottom: 24px;
+    display: block;
+    opacity: 0;
+    animation: scaleIn 0.5s 0.1s forwards;
+    filter: drop-shadow(0 0 30px rgba(59,130,246,0.8));
+  }
+  #s1 .start-btn {
+    margin-top: 48px;
+    background: linear-gradient(90deg, var(--blue), var(--glow));
+    border: none;
+    color: white;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 3px;
+    padding: 16px 40px;
+    border-radius: 50px;
+    cursor: pointer;
+    opacity: 0;
+    animation: fadeUp 0.6s 1.4s forwards;
+    transition: all 0.3s;
+    box-shadow: 0 0 30px rgba(59,130,246,0.3);
+  }
+  #s1 .start-btn:hover { box-shadow: 0 0 50px rgba(59,130,246,0.7); transform: scale(1.05); }
+
+  /* ==============================
+     SCENE 2 – THE PROBLEM
+  ============================== */
+  #s2 .scene-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--cyan);
+    letter-spacing: 4px;
+    margin-bottom: 16px;
+  }
+  #s2 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    text-align: center;
+    color: var(--red);
+    margin-bottom: 48px;
+    text-shadow: 0 0 40px rgba(239,68,68,0.5);
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 900px;
+    width: 100%;
+  }
+  .stat-card {
+    background: rgba(15,23,42,0.8);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--red), transparent);
+  }
+  .stat-num {
+    font-family: 'Orbitron', monospace;
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: var(--red);
+    display: block;
+    text-shadow: 0 0 20px rgba(239,68,68,0.6);
+  }
+  .stat-label { color: #94a3b8; font-size: 0.9rem; margin-top: 8px; line-height: 1.4; }
+
+  /* ==============================
+     SCENE 3 – HOW IT SPREADS
+  ============================== */
+  #s3 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    color: var(--amber);
+    margin-bottom: 40px;
+    text-align: center;
+    text-shadow: 0 0 30px rgba(245,158,11,0.5);
+  }
+  .spread-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    max-width: 1000px;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .spread-node {
+    background: rgba(15,23,42,0.9);
+    border: 1px solid rgba(245,158,11,0.4);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    width: 150px;
+    position: relative;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .spread-node.show { opacity: 1; transform: translateY(0); transition: all 0.5s; }
+  .spread-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+  .spread-label { font-size: 0.8rem; color: #cbd5e1; font-family: 'Share Tech Mono', monospace; }
+  .spread-arrow {
+    color: var(--amber);
+    font-size: 1.5rem;
+    opacity: 0;
+    animation: arrowPulse 1s infinite;
+  }
+  @keyframes arrowPulse { 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:1;transform:translateX(5px)} }
+
+  .victims-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 900px;
+    width: 100%;
+    margin-top: 32px;
+  }
+  .victim-card {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #e2e8f0;
+  }
+  .victim-card .icon { font-size: 1.8rem; display: block; margin-bottom: 6px; }
+
+  /* ==============================
+     SCENE 4 – REAL WORLD IMPACT
+  ============================== */
+  #s4 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    color: var(--white);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  #s4 .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 40px; text-align: center; }
+  .impact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 860px;
+    width: 100%;
+  }
+  .impact-item {
+    background: rgba(15,23,42,0.8);
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-left: 4px solid transparent;
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  .impact-item.show { opacity: 1; transform: translateX(0); transition: all 0.5s; }
+  .impact-item.danger { border-color: var(--red); }
+  .impact-item.warn { border-color: var(--amber); }
+  .impact-item.info { border-color: var(--cyan); }
+  .impact-icon { font-size: 2rem; flex-shrink: 0; }
+  .impact-title { font-family: 'Orbitron', monospace; font-size: 0.9rem; font-weight: 700; margin-bottom: 4px; }
+  .impact-desc { color: #94a3b8; font-size: 0.85rem; line-height: 1.5; }
+
+  /* ==============================
+     SCENE 5 – THE SOLUTION (GM)
+  ============================== */
+  #s5 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  #s5 .tagline { color: var(--muted); font-size: 1rem; margin-bottom: 40px; text-align: center; letter-spacing: 2px; }
+
+  .solution-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 900px;
+    width: 100%;
+  }
+  .sol-card {
+    background: rgba(15,23,42,0.8);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sol-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+  }
+  .sol-card-icon { font-size: 2rem; margin-bottom: 12px; }
+  .sol-card-title { font-family: 'Orbitron', monospace; font-size: 0.9rem; color: var(--green); margin-bottom: 8px; }
+  .sol-card-desc { color: #94a3b8; font-size: 0.85rem; line-height: 1.6; }
+
+  .accuracy-bar-wrap {
+    margin-top: 32px;
+    max-width: 900px;
+    width: 100%;
+    background: rgba(15,23,42,0.8);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .acc-label { font-family: 'Orbitron', monospace; font-size: 0.85rem; white-space: nowrap; color: var(--green); }
+  .acc-bar-bg { flex: 1; height: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; overflow: hidden; }
+  .acc-bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--cyan)); border-radius: 6px; width: 0; transition: width 1.5s ease; box-shadow: 0 0 12px rgba(34,197,94,0.5); }
+  .acc-pct { font-family: 'Orbitron', monospace; font-size: 1.2rem; color: var(--green); font-weight: 700; }
+
+  /* ==============================
+     SCENE 6 – LIVE DEMO MOCK
+  ============================== */
+  #s6 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    color: var(--white);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  #s6 .sub { color: var(--muted); margin-bottom: 32px; text-align: center; }
+
+  .demo-window {
+    background: #0d1526;
+    border: 1px solid rgba(59,130,246,0.4);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 900px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(59,130,246,0.15);
+  }
+  .demo-titlebar {
+    background: rgba(10,15,30,0.9);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(59,130,246,0.2);
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.red { background: #ef4444; }
+  .dot.yellow { background: #f59e0b; }
+  .dot.green { background: #22c55e; }
+  .demo-url { font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; color: var(--muted); margin-left: 12px; }
+  .demo-body { padding: 24px; }
+  .demo-input {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: #e2e8f0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    min-height: 80px;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+    width: 100%;
+  }
+  .demo-scan-btn {
+    background: linear-gradient(90deg, var(--blue), var(--glow));
+    border: none;
+    color: white;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    cursor: default;
+    margin-bottom: 20px;
+    box-shadow: 0 0 20px rgba(59,130,246,0.3);
+  }
+  .demo-result {
+    display: none;
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.4);
+    border-radius: 10px;
+    padding: 16px 20px;
+    color: var(--red);
+    font-family: 'Orbitron', monospace;
+    font-size: 1rem;
+    text-align: center;
+    animation: resultFlash 0.5s;
+  }
+  .demo-result.real {
+    background: rgba(34,197,94,0.08);
+    border-color: rgba(34,197,94,0.4);
+    color: var(--green);
+  }
+  @keyframes resultFlash { 0%{opacity:0;transform:scale(0.95)} 100%{opacity:1;transform:scale(1)} }
+
+  /* ==============================
+     SCENE 7 – CALL TO ACTION
+  ============================== */
+  #s7 {
+    background: radial-gradient(ellipse at center, rgba(30,64,175,0.15) 0%, transparent 70%);
+  }
+  #s7 .shield-big { font-size: 6rem; display: block; text-align: center; margin-bottom: 24px; filter: drop-shadow(0 0 40px rgba(34,197,94,0.7)); animation: floatAnim 3s infinite ease-in-out; }
+  @keyframes floatAnim { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-15px)} }
+  #s7 h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    background: linear-gradient(135deg, var(--white), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  #s7 p { color: #94a3b8; text-align: center; max-width: 600px; line-height: 1.7; font-size: 1.05rem; margin-bottom: 40px; }
+  #s7 .tags {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .tag {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 50px;
+    padding: 8px 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--cyan);
+  }
+
+  /* === UTILITIES === */
+  @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes scaleIn { from{opacity:0;transform:scale(0.5)} to{opacity:1;transform:scale(1)} }
+
+  .counter-num {
+    display: inline-block;
+    font-family: 'Orbitron', monospace;
+  }
+
+  /* Typing cursor */
+  .typing::after { content: '|'; animation: blink 0.7s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Scene transition line */
+  .scan-line {
+    position: fixed;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    z-index: 150;
+    pointer-events: none;
+    opacity: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="grid-bg"></div>
+<div class="scan-line" id="scanLine"></div>
+
+<!-- HUD TOP -->
+<div class="hud-top">
+  <span class="hud-logo">🛡️ FAKE NEWS DETECTIONS</span>
+  <span class="hud-status">SYSTEM ONLINE</span>
+  <span class="hud-right" id="clockDisplay">LOADING...</span>
+</div>
+
+<!-- PROGRESS BAR -->
+<div class="progress-bar" id="progressBar" style="width:0%"></div>
+
+<!-- NAV DOTS -->
+<div class="nav-dots" id="navDots"></div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <span class="scene-counter" id="sceneCounter">01 / 07</span>
+  <button class="ctrl-btn" id="prevBtn" title="Previous">◀</button>
+  <button class="ctrl-btn" id="playBtn" title="Play/Pause">⏸</button>
+  <button class="ctrl-btn" id="nextBtn" title="Next">▶</button>
+</div>
+
+<!-- ==============================
+     SCENE 1 – TITLE
+============================== -->
+<div class="scene active" id="s1">
+  <span class="shield">🛡️</span>
+  <div class="title-badge">FAKE NEWS DETECTIONS PRESENTS</div>
+  <h1>HOW FAKE NEWS<br>DESTROYS SOCIETY</h1>
+  <p class="subtitle">A DATA-DRIVEN AWARENESS DEMONSTRATION</p>
+  <button class="start-btn" id="startBtn">▶ BEGIN PRESENTATION</button>
+</div>
+
+<!-- ==============================
+     SCENE 2 – THE PROBLEM
+============================== -->
+<div class="scene" id="s2">
+  <div class="scene-label">// THREAT ASSESSMENT //</div>
+  <h2>🚨 THE SCALE OF THE PROBLEM</h2>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <span class="stat-num" data-target="6" data-suffix="x">0x</span>
+      <div class="stat-label">Fake news spreads <b>6× faster</b> than real news on Twitter/X</div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-num" data-target="78" data-suffix="%">0%</span>
+      <div class="stat-label">of people have <b>shared misinformation</b> without knowing</div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-num" data-target="500" data-suffix="M+">0M+</span>
+      <div class="stat-label">fake news articles shared <b>every single day</b> globally</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================
+     SCENE 3 – HOW IT SPREADS
+============================== -->
+<div class="scene" id="s3">
+  <div class="scene-label">// PROPAGATION ANALYSIS //</div>
+  <h2>⚡ How Misinformation Spreads</h2>
+  <div class="spread-flow" id="spreadFlow">
+    <div class="spread-node" data-delay="0">
+      <span class="spread-icon">🤥</span>
+      <span class="spread-label">SOURCE<br>CREATED</span>
+    </div>
+    <div class="spread-arrow">→</div>
+    <div class="spread-node" data-delay="200">
+      <span class="spread-icon">📱</span>
+      <span class="spread-label">SOCIAL<br>MEDIA POST</span>
+    </div>
+    <div class="spread-arrow">→</div>
+    <div class="spread-node" data-delay="400">
+      <span class="spread-icon">🔁</span>
+      <span class="spread-label">VIRAL<br>SHARES</span>
+    </div>
+    <div class="spread-arrow">→</div>
+    <div class="spread-node" data-delay="600">
+      <span class="spread-icon">📺</span>
+      <span class="spread-label">MEDIA<br>PICKUP</span>
+    </div>
+    <div class="spread-arrow">→</div>
+    <div class="spread-node" data-delay="800">
+      <span class="spread-icon">🌍</span>
+      <span class="spread-label">MASS<br>BELIEF</span>
+    </div>
+  </div>
+  <div class="victims-grid">
+    <div class="victim-card"><span class="icon">👩‍👩‍👧‍👦</span>Families misled by health misinformation</div>
+    <div class="victim-card"><span class="icon">🗳️</span>Elections influenced by political disinformation</div>
+    <div class="victim-card"><span class="icon">💊</span>Lives lost to false medical advice</div>
+    <div class="victim-card"><span class="icon">📉</span>Markets crashed by financial fake news</div>
+  </div>
+</div>
+
+<!-- ==============================
+     SCENE 4 – REAL WORLD IMPACT
+============================== -->
+<div class="scene" id="s4">
+  <div class="scene-label">// DAMAGE REPORT //</div>
+  <h2>Real World Consequences</h2>
+  <p class="sub">Documented cases where fake news caused measurable harm</p>
+  <div class="impact-list" id="impactList">
+    <div class="impact-item danger">
+      <div class="impact-icon">🦠</div>
+      <div>
+        <div class="impact-title">COVID-19 INFODEMIC</div>
+        <div class="impact-desc">False cures and vaccine misinformation led to preventable deaths worldwide. WHO declared it an "infodemic" running alongside the pandemic itself.</div>
+      </div>
+    </div>
+    <div class="impact-item warn">
+      <div class="impact-icon">🏛️</div>
+      <div>
+        <div class="impact-title">POLITICAL MANIPULATION</div>
+        <div class="impact-desc">Deepfake videos and fabricated quotes of political leaders have influenced election outcomes in multiple countries, eroding democratic trust.</div>
+      </div>
+    </div>
+    <div class="impact-item danger">
+      <div class="impact-icon">📉</div>
+      <div>
+        <div class="impact-title">ECONOMIC DAMAGE</div>
+        <div class="impact-desc">A single false tweet about a company's CEO can crash stock prices within seconds, causing billions in losses before corrections are made.</div>
+      </div>
+    </div>
+    <div class="impact-item info">
+      <div class="impact-icon">😟</div>
+      <div>
+        <div class="impact-title">MENTAL HEALTH CRISIS</div>
+        <div class="impact-desc">Constant exposure to misinformation causes anxiety, paranoia, and social polarization. Studies show 40% of people feel "overwhelmed" by fake news.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================
+     SCENE 5 – THE SOLUTION
+============================== -->
+<div class="scene" id="s5">
+  <div class="scene-label">// SOLUTION DEPLOYED //</div>
+  <h2>🛡️ FAKE NEWS DETECTIONS TO THE RESCUE</h2>
+  <p class="tagline">ADVANCED NLP · MACHINE LEARNING · REAL-TIME ANALYSIS</p>
+  <div class="solution-grid">
+    <div class="sol-card">
+      <div class="sol-card-icon">🧠</div>
+      <div class="sol-card-title">LOGISTIC REGRESSION ENGINE</div>
+      <div class="sol-card-desc">TF-IDF vectorization combined with logistic regression classifies news with high precision, trained on thousands of real and fake articles.</div>
+    </div>
+    <div class="sol-card">
+      <div class="sol-card-icon">🎤</div>
+      <div class="sol-card-title">VOICE & MEDIA ANALYSIS</div>
+      <div class="sol-card-desc">Upload audio, video, or speak directly. The system transcribes using Google Speech Recognition and runs instant analysis.</div>
+    </div>
+    <div class="sol-card">
+      <div class="sol-card-icon">⚡</div>
+      <div class="sol-card-title">SUB-SECOND DETECTION</div>
+      <div class="sol-card-desc">Results delivered in under 0.8 seconds with confidence probability scores, enabling real-time fact-checking at scale.</div>
+    </div>
+    <div class="sol-card">
+      <div class="sol-card-icon">🔒</div>
+      <div class="sol-card-title">SECURE & AUTHENTICATED</div>
+      <div class="sol-card-desc">MongoDB-backed user authentication with AES-256 encryption ensures secure access and audit trails for all analyses.</div>
+    </div>
+  </div>
+  <div class="accuracy-bar-wrap">
+    <span class="acc-label">MODEL ACCURACY</span>
+    <div class="acc-bar-bg"><div class="acc-bar-fill" id="accBar"></div></div>
+    <span class="acc-pct">94.2%</span>
+  </div>
+</div>
+
+<!-- ==============================
+     SCENE 6 – LIVE DEMO MOCK
+============================== -->
+<div class="scene" id="s6">
+  <h2>🔍 Live System Demonstration</h2>
+  <p class="sub">Watch the Truth Analysis Engine in action</p>
+  <div class="demo-window">
+    <div class="demo-titlebar">
+      <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+      <span class="demo-url">localhost:8501 · Fake News Detections – Truth Analysis Engine</span>
+    </div>
+    <div class="demo-body">
+      <div class="demo-input typing" id="demoInput"></div>
+      <div><button class="demo-scan-btn">▶ RUN DEEP SCAN</button></div>
+      <div class="demo-result" id="demoResult"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================
+     SCENE 7 – CTA
+============================== -->
+<div class="scene" id="s7">
+  <span class="shield-big">🛡️</span>
+  <h2>Be the Shield Against Misinformation</h2>
+  <p>In a world flooded with fake news, Fake News Detections stands as your intelligent guardian — combining machine learning, voice analysis, and real-time detection to protect individuals, communities, and democracy itself.</p>
+  <div class="tags">
+    <span class="tag">#FakeNewsDetection</span>
+    <span class="tag">#GMDetections</span>
+    <span class="tag">#NLP</span>
+    <span class="tag">#MachineLearning</span>
+    <span class="tag">#TruthMatters</span>
+    <span class="tag">#MediaLiteracy</span>
+  </div>
+</div>
+
+<script>
+// ==============================
+// STATE
+// ==============================
+const TOTAL = 7;
+let current = 1;
+let playing = false;
+let timer = null;
+const DURATIONS = [0, 6000, 7000, 8000, 8000, 8000, 10000, 8000]; // per scene ms
+
+// ==============================
+// CURSOR
+// ==============================
+const cursor = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX - 6 + 'px';
+  cursor.style.top = e.clientY - 6 + 'px';
+});
+
+// ==============================
+// CLOCK
+// ==============================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clockDisplay').textContent =
+    now.toLocaleTimeString('en-US', { hour12: false }) + ' · ' +
+    now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).toUpperCase();
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ==============================
+// NAV DOTS
+// ==============================
+const dotsEl = document.getElementById('navDots');
+for (let i = 1; i <= TOTAL; i++) {
+  const d = document.createElement('div');
+  d.className = 'nav-dot' + (i === 1 ? ' active' : '');
+  d.addEventListener('click', () => goTo(i));
+  dotsEl.appendChild(d);
+}
+
+function updateDots(n) {
+  dotsEl.querySelectorAll('.nav-dot').forEach((d, i) => {
+    d.className = 'nav-dot' + (i + 1 === n ? ' active' : '');
+  });
+}
+
+// ==============================
+// PROGRESS & COUNTER
+// ==============================
+function updateProgress(n) {
+  document.getElementById('progressBar').style.width = ((n / TOTAL) * 100) + '%';
+  document.getElementById('sceneCounter').textContent =
+    String(n).padStart(2, '0') + ' / ' + String(TOTAL).padStart(2, '0');
+}
+
+// ==============================
+// SCAN LINE TRANSITION
+// ==============================
+function scanTransition(cb) {
+  const sl = document.getElementById('scanLine');
+  sl.style.top = '0';
+  sl.style.opacity = '1';
+  sl.style.transition = 'top 0.4s linear';
+  sl.style.top = '100vh';
+  setTimeout(() => { sl.style.opacity = '0'; sl.style.top = '0'; cb(); }, 400);
+}
+
+// ==============================
+// GO TO SCENE
+// ==============================
+function goTo(n) {
+  if (n < 1 || n > TOTAL) return;
+  scanTransition(() => {
+    document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+    const scene = document.getElementById('s' + n);
+    scene.classList.add('active');
+    current = n;
+    updateDots(n);
+    updateProgress(n);
+    onSceneEnter(n);
+  });
+}
+
+// ==============================
+// SCENE ENTER HOOKS
+// ==============================
+function onSceneEnter(n) {
+  if (n === 2) animateCounters();
+  if (n === 3) animateSpread();
+  if (n === 4) animateImpact();
+  if (n === 5) animateAccBar();
+  if (n === 6) runDemo();
+}
+
+// Counter animation
+function animateCounters() {
+  document.querySelectorAll('.stat-num[data-target]').forEach(el => {
+    const target = parseInt(el.dataset.target);
+    const suffix = el.dataset.suffix || '';
+    let current = 0;
+    const duration = 1800;
+    const step = duration / target;
+    el.textContent = '0' + suffix;
+    const interval = setInterval(() => {
+      current = Math.min(current + Math.ceil(target / 60), target);
+      el.textContent = current + suffix;
+      if (current >= target) clearInterval(interval);
+    }, step);
+  });
+}
+
+// Spread animation
+function animateSpread() {
+  document.querySelectorAll('#spreadFlow .spread-node').forEach(node => {
+    const delay = parseInt(node.dataset.delay || 0);
+    setTimeout(() => node.classList.add('show'), delay);
+  });
+}
+
+// Impact animation
+function animateImpact() {
+  document.querySelectorAll('#impactList .impact-item').forEach((item, i) => {
+    setTimeout(() => item.classList.add('show'), i * 300);
+  });
+}
+
+// Accuracy bar
+function animateAccBar() {
+  setTimeout(() => {
+    document.getElementById('accBar').style.width = '94.2%';
+  }, 400);
+}
+
+// Demo typing animation
+const demoTexts = [
+  {
+    text: "BREAKING: Scientists discover that drinking bleach cures cancer! Big pharma is hiding this miracle cure from you. Share before they delete this!",
+    result: "🚨 VERDICT: FAKE NEWS",
+    cls: ""
+  },
+  {
+    text: "The World Health Organization has released updated vaccination guidelines for 2025, recommending annual boosters for high-risk groups based on clinical trial data.",
+    result: "✅ VERDICT: REAL NEWS",
+    cls: "real"
+  }
+];
+let demoIndex = 0;
+let demoTypingInterval = null;
+
+function runDemo() {
+  clearInterval(demoTypingInterval);
+  demoIndex = 0;
+  runDemoCase();
+}
+
+function runDemoCase() {
+  const input = document.getElementById('demoInput');
+  const result = document.getElementById('demoResult');
+  result.style.display = 'none';
+  input.textContent = '';
+  input.classList.add('typing');
+
+  const entry = demoTexts[demoIndex % demoTexts.length];
+  let i = 0;
+  demoTypingInterval = setInterval(() => {
+    input.textContent += entry.text[i];
+    i++;
+    if (i >= entry.text.length) {
+      clearInterval(demoTypingInterval);
+      input.classList.remove('typing');
+      setTimeout(() => {
+        result.textContent = entry.result;
+        result.className = 'demo-result' + (entry.cls ? ' ' + entry.cls : '');
+        result.style.display = 'block';
+        demoIndex++;
+        if (demoIndex < demoTexts.length) {
+          setTimeout(runDemoCase, 3000);
+        }
+      }, 800);
+    }
+  }, 30);
+}
+
+// ==============================
+// AUTO PLAY
+// ==============================
+function startAutoPlay() {
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸';
+  scheduleNext();
+}
+
+function stopAutoPlay() {
+  playing = false;
+  clearTimeout(timer);
+  document.getElementById('playBtn').textContent = '▶';
+}
+
+function scheduleNext() {
+  clearTimeout(timer);
+  const duration = DURATIONS[current] || 6000;
+  timer = setTimeout(() => {
+    if (current < TOTAL) { goTo(current + 1); if (playing) scheduleNext(); }
+    else stopAutoPlay();
+  }, duration);
+}
+
+// ==============================
+// CONTROLS
+// ==============================
+document.getElementById('prevBtn').addEventListener('click', () => {
+  stopAutoPlay();
+  goTo(current - 1);
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  stopAutoPlay();
+  goTo(current + 1);
+});
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) stopAutoPlay();
+  else { if (current >= TOTAL) goTo(1); startAutoPlay(); }
+});
+document.getElementById('startBtn').addEventListener('click', () => {
+  goTo(2);
+  startAutoPlay();
+});
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { stopAutoPlay(); goTo(current + 1); }
+  if (e.key === 'ArrowLeft') { stopAutoPlay(); goTo(current - 1); }
+  if (e.key === 'p' || e.key === 'P') {
+    if (playing) stopAutoPlay(); else startAutoPlay();
+  }
+});
+
+// Init
+updateProgress(1);
+</script>
+</body>
+</html>

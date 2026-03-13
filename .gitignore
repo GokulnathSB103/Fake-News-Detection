@@ -1,0 +1,38 @@
+# --- Environment & Sensitive Data ---
+# Crucial: This protects your MongoDB URI found in source
+.env
+.streamlit/secrets.toml
+
+# --- Python Virtual Environments ---
+venv/
+env/
+.venv/
+ENV/
+
+# --- Byte-compiled / Optimized Files ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Machine Learning Artifacts ---
+# Ignore large model files if they are recreated during training
+# or if you prefer using a model registry
+*.pkl
+*.sav
+*.joblib
+
+# --- IDE & Editor Settings ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+
+# --- Log Files ---
+*.log
+logs/
+pip-log.txt
+
+# --- Temporary Files ---
+*.tmp
+*.temp
