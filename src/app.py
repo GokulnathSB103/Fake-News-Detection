@@ -15,9 +15,11 @@ st.set_page_config(page_title="Fake News Detections", page_icon="⚖️", layout
 
 # --- 2. HELPER FOR BACKGROUND IMAGE ---
 def get_base64_image(file_path):
-    with open(file_path, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return None
 
 # --- 3. PREMIUM LIGHT UI (CSS) ---
 st.markdown("""
@@ -68,20 +70,19 @@ if 'user_name' not in st.session_state:
     st.session_state['user_name'] = ""
 if 'processed_text' not in st.session_state:
     st.session_state['processed_text'] = ""
-# --- NEW SESSION STATE FOR CHAT ---
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
 # --- 5. PAGE FUNCTIONS ---
 
 def show_auth_page():
-    if os.path.exists("bell.avif"):
-        img_base64 = get_base64_image("bell.avif")
+    img_b64 = get_base64_image("bell.avif")
+    if img_b64:
         st.markdown(f"""
             <style>
             .stApp {{
                 background-image: linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.4)), 
-                                  url("data:image/jpg;base64,{img_base64}");
+                                  url("data:image/jpg;base64,{img_b64}");
                 background-size: cover;
                 background-position: center;
             }}
@@ -92,8 +93,7 @@ def show_auth_page():
     _, col2, _ = st.columns([1, 1.4, 1])
     
     with col2:
-        # Re-enabling the card container for the UI
-        st.markdown('<div class="user-card">', unsafe_allow_html=True)
+        # st.markdown('<div class="user-card">', unsafe_allow_html=True)
         st.markdown("<h1 style='text-align: center;'>🛡️ Fake News Detections</h1>", unsafe_allow_html=True)
         
         mode = st.tabs(["Sign In", "Register"])
@@ -112,24 +112,21 @@ def show_auth_page():
 
         with mode[1]:
             new_name = st.text_input("Full Name")
-            new_email = st.text_input("Email")
-            # --- UPDATED SECTION START ---
-            new_pass = st.text_input("Create Password", type="password")
-            confirm_pass = st.text_input("Confirm Password", type="password")
+            new_email = st.text_input("Email", key="reg_email")
+            new_pass = st.text_input("Create Password", type="password", key="reg_pass")
+            confirm_pass = st.text_input("Confirm Password", type="password", key="reg_confirm")
             
             if st.button("CREATE ACCOUNT"):
                 if not new_name or not new_email or not new_pass:
                     st.warning("Please fill in all fields.")
                 elif new_pass != confirm_pass:
-                    st.error("Passwords do not match! Please check again.")
+                    st.error("Passwords do not match!")
                 else:
                     result = add_user(new_name, new_email, new_pass)
                     if result == "success":
                         st.success("Account created successfully! Please sign in.")
                     else:
                         st.error("Registration failed. Email might already exist.")
-            # --- UPDATED SECTION END ---
-            
         st.markdown('</div>', unsafe_allow_html=True)
 
 def show_home():
@@ -159,7 +156,6 @@ def show_detector():
     with tab1:
         # st.markdown('<div class="user-card">', unsafe_allow_html=True)
         media_choice = st.radio("Source", ["Upload File", "Live Mic"], horizontal=True)
-        
         audio_source = None
         if media_choice == "Upload File":
             audio_source = st.file_uploader("Upload Clip", type=["wav", "mp3", "mp4"])
@@ -194,25 +190,25 @@ def show_detector():
         st.markdown('</div>', unsafe_allow_html=True)
 
     # --- TAB 3: CHATBOT ---
-  # Inside show_detector() function under tab3:
-with tab3:
-    st.markdown('<div class="user-card">', unsafe_allow_html=True)
-    st.subheader("Truth-Seeker AI Assistant")
-    
-    # User Input
-    if user_query := st.chat_input("Ex: What are the criteria for video?"):
-        # Add user message to history
-        st.session_state.chat_history.append({"role": "user", "content": user_query})
+    with tab3:
+        # st.markdown('<div class="user-card">', unsafe_allow_html=True)
+        st.subheader("Truth-Seeker AI Assistant")
         
-        # Get response from chatbot_logic.py
-        response = get_chatbot_response(user_query)
+        # Display chat history
+        for chat in st.session_state.chat_history:
+            with st.chat_message(chat["role"]):
+                st.write(chat["content"])
         
-        # Add bot message to history
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
-        st.rerun() # Refresh to show new messages
+        # User Input logic
+        if user_query := st.chat_input("Ex: What are the criteria for video?"):
+            st.session_state.chat_history.append({"role": "user", "content": user_query})
+            response = get_chatbot_response(user_query)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            st.rerun() 
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- FINAL TEXT ANALYSIS (Shared logic for all tabs) ---
-    st.markdown('<div class="user-card">', unsafe_allow_html=True)
+    # --- FINAL TEXT ANALYSIS (Bottom of page) ---
+    # st.markdown('<div class="user-card">', unsafe_allow_html=True)
     st.subheader("Final Content Verification")
     input_text = st.text_area("Content for Analysis", value=st.session_state['processed_text'], height=150)
     
